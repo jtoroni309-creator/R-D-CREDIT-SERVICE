@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: rd-credit-db
+    environment:
+      POSTGRES_DB: rdcredit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rd-credit-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rdcredit?schema=public
+      PORT: 3000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      SHAREFILE_CLIENT_ID: ${SHAREFILE_CLIENT_ID}
+      SHAREFILE_CLIENT_SECRET: ${SHAREFILE_CLIENT_SECRET}
+      SHAREFILE_REDIRECT_URI: ${SHAREFILE_REDIRECT_URI}
+      SHAREFILE_SUBDOMAIN: ${SHAREFILE_SUBDOMAIN}
+      SHAREFILE_API_URL: ${SHAREFILE_API_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/uploads:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rd-credit-frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+      VITE_SHAREFILE_CLIENT_ID: ${SHAREFILE_CLIENT_ID}
+      VITE_SHAREFILE_REDIRECT_URI: ${SHAREFILE_REDIRECT_URI}
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local

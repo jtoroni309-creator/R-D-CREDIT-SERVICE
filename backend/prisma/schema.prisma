@@ -1,0 +1,291 @@
+// Prisma schema for R&D Tax Credit Application
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - linked to ShareFile user
+model User {
+  id                String        @id @default(uuid())
+  shareFileUserId   String        @unique
+  email             String        @unique
+  firstName         String
+  lastName          String
+  role              UserRole      @default(STAFF)
+  isActive          Boolean       @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  engagements       Engagement[]
+  auditLogs         AuditLog[]
+  createdProjects   Project[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  CLIENT
+  STAFF
+  ADMIN
+}
+
+// Engagement - main container for R&D study
+model Engagement {
+  id                    String              @id @default(uuid())
+  shareFileFolderId     String              @unique
+  taxpayerName          String
+  taxpayerEIN           String
+  taxpayerAddress       String
+  taxYear               Int
+  status                EngagementStatus    @default(DRAFT)
+  selectedStates        String[]            @default([])
+
+  // Metadata
+  createdById           String
+  createdBy             User                @relation(fields: [createdById], references: [id])
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  finalizedAt           DateTime?
+
+  // Relations
+  projects              Project[]
+  wages                 Wage[]
+  supplies              Supply[]
+  contracts             ContractResearch[]
+  calculations          Calculation[]
+  reports               Report[]
+  auditLogs             AuditLog[]
+
+  @@index([taxpayerEIN, taxYear])
+  @@index([status])
+  @@map("engagements")
+}
+
+enum EngagementStatus {
+  DRAFT
+  IN_PROGRESS
+  REVIEW
+  APPROVED
+  COMPLETED
+  ARCHIVED
+}
+
+// Project - individual R&D project
+model Project {
+  id                      String            @id @default(uuid())
+  engagementId            String
+  engagement              Engagement        @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  // Project details
+  name                    String
+  description             String            @db.Text
+  businessComponent       String            @db.Text
+  technologiesUsed        String[]          @default([])
+
+  // 4-Part Test responses (JSON structure)
+  permittedPurpose        Json              // {question1: answer, question2: answer, ...}
+  eliminationUncertainty  Json
+  processExperimentation  Json
+  technologicalNature     Json
+
+  // LLM-assisted content
+  narrativeOriginal       String?           @db.Text
+  narrativeImproved       String?           @db.Text
+  narrativeApproved       Boolean           @default(false)
+
+  // Validation
+  isValidated             Boolean           @default(false)
+  validationNotes         String?           @db.Text
+
+  // Metadata
+  createdById             String
+  createdBy               User              @relation(fields: [createdById], references: [id])
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  // Relations
+  wages                   Wage[]
+  supplies                Supply[]
+  contracts               ContractResearch[]
+
+  @@index([engagementId])
+  @@map("projects")
+}
+
+// QRE: Wages
+model Wage {
+  id                String      @id @default(uuid())
+  engagementId      String
+  engagement        Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  projectId         String?
+  project           Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  employeeName      String
+  annualSalary      Decimal     @db.Decimal(12, 2)
+  percentTime       Decimal     @db.Decimal(5, 2) // 0-100
+  qualifiedWages    Decimal     @db.Decimal(12, 2)
+  notes             String?     @db.Text
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([engagementId])
+  @@index([projectId])
+  @@map("wages")
+}
+
+// QRE: Supplies
+model Supply {
+  id                String      @id @default(uuid())
+  engagementId      String
+  engagement        Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  projectId         String?
+  project           Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  description       String
+  totalCost         Decimal     @db.Decimal(12, 2)
+  qualifiedAmount   Decimal     @db.Decimal(12, 2)
+  justification     String?     @db.Text
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([engagementId])
+  @@index([projectId])
+  @@map("supplies")
+}
+
+// QRE: Contract Research
+model ContractResearch {
+  id                  String      @id @default(uuid())
+  engagementId        String
+  engagement          Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  projectId           String?
+  project             Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  vendorName          String
+  contractAmount      Decimal     @db.Decimal(12, 2)
+  qualifiedPercent    Decimal     @db.Decimal(5, 2) // 0-100
+  qualifiedAmount     Decimal     @db.Decimal(12, 2)
+  description         String?     @db.Text
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([engagementId])
+  @@index([projectId])
+  @@map("contract_research")
+}
+
+// Calculation results
+model Calculation {
+  id                      String      @id @default(uuid())
+  engagementId            String
+  engagement              Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  // Input totals
+  totalWages              Decimal     @db.Decimal(12, 2)
+  totalSupplies           Decimal     @db.Decimal(12, 2)
+  totalContracts          Decimal     @db.Decimal(12, 2)
+  totalQRE                Decimal     @db.Decimal(12, 2)
+
+  // Federal Regular Credit
+  regularBaseAmount       Decimal?    @db.Decimal(12, 2)
+  regularExcessQRE        Decimal?    @db.Decimal(12, 2)
+  regularCreditAmount     Decimal?    @db.Decimal(12, 2)
+
+  // Federal ASC
+  ascBaseAmount           Decimal?    @db.Decimal(12, 2)
+  ascExcessQRE            Decimal?    @db.Decimal(12, 2)
+  ascCreditAmount         Decimal?    @db.Decimal(12, 2)
+
+  // State credits (JSON by state)
+  stateCredits            Json        // {CA: {credit: 123, ...}, NY: {...}}
+
+  // Allocation by project (JSON)
+  projectAllocations      Json
+
+  // Metadata
+  calculatedAt            DateTime    @default(now())
+  calculatedBy            String      // User ID
+
+  @@index([engagementId])
+  @@map("calculations")
+}
+
+// Generated reports
+model Report {
+  id                String          @id @default(uuid())
+  engagementId      String
+  engagement        Engagement      @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  reportType        ReportType
+  fileUrl           String          // ShareFile URL
+  fileName          String
+  fileSize          Int             // bytes
+
+  generatedAt       DateTime        @default(now())
+  generatedBy       String          // User ID
+
+  @@index([engagementId, reportType])
+  @@map("reports")
+}
+
+enum ReportType {
+  PDF_STUDY
+  FORM_6765_JSON
+  FORM_6765_CSV
+  FORM_6765_EXCEL
+  FORM_6765_PDF
+}
+
+// Audit log for compliance
+model AuditLog {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  engagementId  String?
+  engagement    Engagement? @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  action        String      // CREATE, UPDATE, DELETE, CALCULATE, GENERATE_REPORT, etc.
+  entityType    String      // Engagement, Project, Wage, etc.
+  entityId      String?
+  changes       Json?       // Before/after values
+
+  ipAddress     String?
+  userAgent     String?
+  timestamp     DateTime    @default(now())
+
+  @@index([userId])
+  @@index([engagementId])
+  @@index([timestamp])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// Configuration for state credit calculations
+model StateConfig {
+  id                  String    @id @default(uuid())
+  stateCode           String    @unique // CA, NY, etc.
+  stateName           String
+  creditRate          Decimal   @db.Decimal(5, 4) // e.g., 0.15 for 15%
+  baseCalculation     String    // METHOD_ASC, METHOD_REGULAR, etc.
+  hasCarryforward     Boolean   @default(true)
+  carryforwardYears   Int?
+  hasCap              Boolean   @default(false)
+  capAmount           Decimal?  @db.Decimal(12, 2)
+  isRefundable        Boolean   @default(false)
+  isActive            Boolean   @default(true)
+
+  notes               String?   @db.Text
+  updatedAt           DateTime  @updatedAt
+
+  @@map("state_configs")
+}
