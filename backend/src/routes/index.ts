@@ -6,6 +6,7 @@ import qreRoutes from './qre.routes';
 import calculationRoutes from './calculation.routes';
 import llmRoutes from './llm.routes';
 import reportRoutes from './report.routes';
+import priorYearRoutes from './prior-year.routes';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/qre', qreRoutes);
 router.use('/calculations', calculationRoutes);
 router.use('/llm', llmRoutes);
 router.use('/reports', reportRoutes);
+router.use('/prior-year', priorYearRoutes);
 
 export default router;
