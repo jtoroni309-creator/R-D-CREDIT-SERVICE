@@ -7,6 +7,7 @@ import calculationRoutes from './calculation.routes';
 import llmRoutes from './llm.routes';
 import reportRoutes from './report.routes';
 import priorYearRoutes from './prior-year.routes';
+import documentRoutes from './document.routes';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/calculations', calculationRoutes);
 router.use('/llm', llmRoutes);
 router.use('/reports', reportRoutes);
 router.use('/prior-year', priorYearRoutes);
+router.use('/documents', documentRoutes);
 
 export default router;
