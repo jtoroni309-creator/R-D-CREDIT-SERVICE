@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import healthRoutes from './health.routes';
 import authRoutes from './auth.routes';
 import engagementRoutes from './engagement.routes';
 import projectRoutes from './project.routes';
@@ -11,6 +12,10 @@ import documentRoutes from './document.routes';
 
 const router = Router();
 
+// Health check routes (no auth required)
+router.use('/', healthRoutes);
+
+// Application routes (auth required where applicable)
 router.use('/auth', authRoutes);
 router.use('/engagements', engagementRoutes);
 router.use('/projects', projectRoutes);
